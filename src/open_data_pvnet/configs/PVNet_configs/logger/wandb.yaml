@@ -9,7 +9,7 @@ wandb:
   save_dir: "PLACEHOLDER"
   offline: False # set True to store all logs only locally
   id: null # pass correct id to resume experiment!
-  id: "${oc.env:WANDB_RUN_ID}"
+  # id: "${oc.env:WANDB_RUN_ID}" # use only one id souce at a time!
   # entity: ""  # set to name of your wandb team or just remove it
   log_model: True
   prefix: ""

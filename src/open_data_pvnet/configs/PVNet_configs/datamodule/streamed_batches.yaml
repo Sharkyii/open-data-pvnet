@@ -2,14 +2,10 @@ _target_: pvnet.data.DataModule
 # Path to the data configuration yaml file. You can find examples in the configuration subdirectory
 # in configs.example/datamodule/configuration
 # Use the full local path such as: /FULL/PATH/PVNet/configs/datamodule/configuration/gcp_configuration.yaml"
-configuration: null
+configuration: C:/Users/SNEH/OneDrive/Desktop/Test/open-data-pvnet/src/open_data_pvnet/configs/PVNet_configs/datamodule/configuration/example_configuration.yaml
 num_workers: 8
 prefetch_factor: 2
 batch_size: 8
-
-sample_output_dir: "GFS_samples"
-num_train_samples: 5 #1000 Increase at your discretion
-num_val_samples: 5 #1000 Increase at your discretion
 
 train_period:
   - null

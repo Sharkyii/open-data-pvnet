@@ -26,21 +26,26 @@ The main configuration file is `config.yaml`, which tells the system which sub-c
 ## 2. Understanding the Key Configuration Parts
 
 ### Trainer Configuration
+
 Controls how your model trains:
-- GPU/CPU usage
-- Training duration
-- Precision settings
+* GPU/CPU usage
+* Training duration
+* Precision settings
 
 ### Model Configuration
+
 Defines your model's architecture:
-- Which encoders to use (GFS, satellite, etc.)
-- Forecast horizon
-- Optimizer settings
+
+* Which encoders to use (GFS, satellite, etc.)
+* Forecast horizon
+* Optimizer settings
 
 ### Data Configuration (Most Important!)
+
 This determines how your data is loaded. PVNet supports two approaches:
-- **Streamed batches**: Directly from Zarr files
-- **Premade batches**: From pre-generated samples
+
+* **Streamed batches**: Directly from Zarr files
+* **Premade batches**: From pre-generated samples
 
 You must choose only one approach at a time - mixing them will cause errors.
 
@@ -53,16 +58,19 @@ You must choose only one approach at a time - mixing them will cause errors.
 This approach loads data directly from Zarr files during training.
 
 **When to use it:**
-- You have sufficient disk space and bandwidth
-- You don't want to pre-generate samples
+
+* You have sufficient disk space and bandwidth
+* You don't want to pre-generate samples
 
 **How to set it up:**
 In your `config.yaml`, ensure you have:
+
 ```yaml
 - datamodule: streamed_batches.yaml
 ```
 
 **Important settings:**
+
 ```yaml
 _target_: pvnet.data.DataModule
 configuration: /ABSOLUTE/PATH/example_configuration.yaml
@@ -80,22 +88,22 @@ val_period:
 **What to avoid:**
 Don't include `sample_output_dir`, `num_train_samples`, or `num_val_samples` in your streamed configuration, as these will cause errors.
 
-**To start training:**
-```bash
-python run.py experiment=example_simple
-```
+---
 
-### Method 2: Premade Batches (Recommended for Beginners)
+### Method 2: Premade Batches (Recommended)
 
 This approach uses pre-generated samples, making training more stable and reproducible.
 
 **When to use it:**
-- You want consistent, reproducible results
-- You want faster iteration during development
-- You've encountered issues with Zarr or storage
+
+* You want consistent, reproducible results
+* You want faster iteration during development
+* You've encountered issues with Zarr or storage
 
 **Step 1: Generate samples**
+
 Navigate to `open-data-pvnet/src/open_data_pvnet/scripts` and run:
+
 ```bash
 python save_samples.py \
   +datamodule.sample_output_dir="GFS_samples" \
@@ -105,6 +113,7 @@ python save_samples.py \
 ```
 
 This creates a directory with your samples:
+
 ```
 scripts/
 └── GFS_samples/
@@ -113,26 +122,108 @@ scripts/
     └── val/
 ```
 
-**Step 2: Switch to premade batches**
-In your `config.yaml`, change to:
-```yaml
+Before running the samples, ensure the following configuration updates are made.
+
+Go to `src/open_data_pvnet/configs/PVNet_configs/datamodule/streamed_batches.yaml`
+Change values if desired (increase at your discretion):
+
+```
+num_train_samples: 5
+num_val_samples: 5
+```
+
+Update `src/open_data_pvnet/configs/PVNet_configs/datamodule/premade_batches.yaml`
+Change this line to:
+
+```
+configuration: <your_directory...open-data-pvnet/src/open_data_pvnet/configs/PVNet_configs/datamodule/configuration/example_configuration.yaml>
+```
+
+Update `src/open_data_pvnet/configs/PVNet_configs/config.yaml`
+Change the line to:
+
+```
 - datamodule: premade_batches.yaml
 ```
 
-**Step 3: Configure the premade batches**
-```yaml
-_target_: pvnet.data.DataModule
-sample_output_dir: /ABSOLUTE/PATH/TO/GFS_samples
-batch_size: 8
-num_workers: 2
-prefetch_factor: 2
+---
+
+**Step 2: Configure Weights & Biases**
+
+Create a Weights & Biases account:
+[https://wandb.ai/](https://wandb.ai/)
+
+Go to `src/open_data_pvnet/configs/PVNet_configs/logger/wandb.yaml`
+Change:
+
+```
+project: "GFS_TEST_RUN"
+save_dir: "GFS_TEST_RUN"
 ```
 
-**Important:** Always use absolute paths! Hydra changes the working directory at runtime, so relative paths will break.
+---
+
+**Step 3: Prepare data locally (recommended)**
+
+We recommend you save the samples locally for faster processing.
+
+In your main `open-data-pvnet` directory, run the following command (assumes aws cli is installed locally):
+
+```bash
+aws s3 sync s3://ocf-open-data-pvnet/data/gfs/v4/2023.zarr/ ./gfs_2023.zarr --no-sign-request
+aws s3 sync s3://ocf-open-data-pvnet/data/uk/pvlive/v2/combined_2023_gsp.zarr ./gsp_2023.zarr --no-sign-request
+```
+
+Change the `example_configuration.yaml` `zarr_path` attributes to the local paths you created above.
+
+Comment out both of these lines:
+
+```
+public: True
+```
+
+If you are going to use the actual s3 buckets then leave alone however this may be really slow.
+
+In `streamed_batches.yaml` change this line:
+
+```
+configuration: null
+```
+
+to your actual path of the `example_configuration.yaml` file.
+
+If running in a virtual environment, be sure to activate it:
+
+```
+source ./venv/bin/activate
+```
+
+Remove previous sample runs:
+
+```
+rm -rf GFS_samples PLACEHOLDER
+```
+
+Run:
+
+```bash
+python src/open_data_pvnet/scripts/save_samples.py
+```
+
+---
 
 **Step 4: Train**
+
+Go to `config.yaml` and ensure:
+
+```
+- datamodule: premade_batches.yaml
+```
+
+Then run:
+
 ```bash
-python run.py experiment=example_simple
+python run.py
 ```
 
 ---
@@ -233,3 +324,6 @@ Then authenticate:
 ```bash
 gcloud auth application-default login
 ```
+
+Thank you for joining us on this journey to advance solar forecasting and renewable energy solutions!
+

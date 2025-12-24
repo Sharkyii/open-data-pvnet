@@ -7,9 +7,6 @@ num_workers: 8
 prefetch_factor: 2
 batch_size: 8
 
-sample_output_dir: "GFS_samples"
-num_train_samples: 5 #1000 Increase at your discretion
-num_val_samples: 5 #1000 Increase at your discretion
 
 train_period:
   - null

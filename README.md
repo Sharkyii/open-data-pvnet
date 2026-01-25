@@ -46,6 +46,13 @@ We are looking for volunteers with the following skills:
 
 Ready to dive in? Check out our [Getting Started Guide](docs/getting_started.md#solar-forecasting-volunteer-onboarding) for an introduction to the key concepts and how you can contribute effectively.
 
+### Documentation
+
+- [Getting Started Guide](docs/getting_started.md) - Introduction to key concepts
+- [Training Model for New Country](docs/training_model_new_country.md) - Step-by-step guide for training models for new countries
+- [Working with NWP Data](docs/working_with_nwp.md) - Understanding weather data
+- [Datasets Guide](docs/datasets.md) - Available datasets
+
 ### Notebooks
 
 - [Understanding GFS Data](notebooks/understanding_gfs_data.ipynb)

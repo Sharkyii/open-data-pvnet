@@ -1,15 +1,9 @@
 ## Training Pipeline
 
-This guide explains how to train PVNet using the open-data-pvnet pipeline. It covers:
-- Configuration structure and best practices
-- The two supported training workflows (with clear recommendations)
-- Common pitfalls and how to resolve them
-
----
 
 ## 1. Configuration Basics
 
-All configuration files live in a structured directory:
+All configuration files are under PVVet_configs
 
 ```
 open-data-pvnet/
@@ -19,7 +13,7 @@ open-data-pvnet/
             └── PVNet_configs/
 ```
 
-The main configuration file is `config.yaml`, which tells the system which sub-configurations to use. Think of it as the master control panel that connects everything together.
+The main configuration file is `config.yaml`, which tells the system which sub-configurations to use.
 
 ---
 
@@ -27,18 +21,11 @@ The main configuration file is `config.yaml`, which tells the system which sub-c
 
 ### Trainer Configuration
 
-Controls how your model trains:
-* GPU/CPU usage
-* Training duration
-* Precision settings
+* Controls how your model trains
 
 ### Model Configuration
 
-Defines your model's architecture:
-
-* Which encoders to use (GFS, satellite, etc.)
-* Forecast horizon
-* Optimizer settings
+* Defines your model's architecture
 
 ### Data Configuration (Most Important!)
 
@@ -47,8 +34,6 @@ This determines how your data is loaded. PVNet supports two approaches:
 * **Streamed batches**: Directly from Zarr files
 * **Premade batches**: From pre-generated samples
 
-You must choose only one approach at a time - mixing them will cause errors.
-
 ---
 
 ## 3. Two Ways to Train PVNet
@@ -56,11 +41,6 @@ You must choose only one approach at a time - mixing them will cause errors.
 ### Method 1: Streamed Batches (Direct Zarr Loading)
 
 This approach loads data directly from Zarr files during training.
-
-**When to use it:**
-
-* You have sufficient disk space and bandwidth
-* You don't want to pre-generate samples
 
 **How to set it up:**
 In your `config.yaml`, ensure you have:
@@ -84,21 +64,12 @@ val_period:
   - "2023-07-01"
   - "2023-12-31"
 ```
-
-**What to avoid:**
-Don't include `sample_output_dir`, `num_train_samples`, or `num_val_samples` in your streamed configuration, as these will cause errors.
-
 ---
 
 ### Method 2: Premade Batches (Recommended)
 
 This approach uses pre-generated samples, making training more stable and reproducible.
 
-**When to use it:**
-
-* You want consistent, reproducible results
-* You want faster iteration during development
-* You've encountered issues with Zarr or storage
 
 **Step 1: Generate samples**
 
@@ -153,14 +124,6 @@ Change the line to:
 Create a Weights & Biases account:
 [https://wandb.ai/](https://wandb.ai/)
 
-Go to `src/open_data_pvnet/configs/PVNet_configs/logger/wandb.yaml`
-Change:
-
-```
-project: "GFS_TEST_RUN"
-save_dir: "GFS_TEST_RUN"
-```
-
 ---
 
 **Step 3: Prepare data locally (recommended)**
@@ -192,24 +155,6 @@ configuration: null
 
 to your actual path of the `example_configuration.yaml` file.
 
-If running in a virtual environment, be sure to activate it:
-
-```
-source ./venv/bin/activate
-```
-
-Remove previous sample runs:
-
-```
-rm -rf GFS_samples PLACEHOLDER
-```
-
-Run:
-
-```bash
-python src/open_data_pvnet/scripts/save_samples.py
-```
-
 ---
 
 **Step 4: Train**
@@ -228,13 +173,11 @@ python run.py
 
 ---
 
-## 4. Data Configuration Best Practices
+## 4. Data Configuration 
 
-When setting up your data configuration (`example_configuration.yaml`), we strongly recommend:
+When setting up your data configuration (`example_configuration.yaml`):
 
-1. Download data locally
-2. Point to local Zarr paths
-3. Set `public: false` for local data
+1. Set `public: false` for local data
 
 Example configuration:
 ```yaml
@@ -247,69 +190,6 @@ nwp:
     zarr_path: C:/data/nwp/nwp_gfs.zarr
     public: false
 ```
-
-### Important Note About Local Data
-
-If you're using local data, make sure to set `public: false` in your configuration. When `public: true` is set with a local path, you'll encounter this error:
-
-```
-ValueError: storage_options passed with non-fsspec path
-```
-
-For example, if your configuration looks like this:
-```yaml
-gsp:
-  zarr_path: "s3://ocf-open-data-pvnet/data/uk/pvlive/v2/combined_2023_gsp.zarr"
-  # ... other settings ...
-  public: True
-```
-
-And you're trying to use local data, change it to:
-```yaml
-gsp:
-  zarr_path: "/path/to/your/local/data/combined_2023_gsp.zarr"
-  # ... other settings ...
-  public: False
-```
-
----
-
-## 5. Common Hydra Issues
-
-### Hydra Override Error
-
-If you encounter an override error when using `experiment_simple`, it might be due to conflicting override declarations. The `experiment_simple` configuration includes these overrides:
-
-```yaml
-defaults:
-  - override /trainer: default.yaml
-  - override /model: multimodal.yaml
-  - override /datamodule: premade_samples.yaml
-  - override /callbacks: default.yaml
-  - override /logger: wandb.yaml
-  - override /hydra: default.yaml
-```
-
-If you see errors like "Could not override 'hydra'", you may need to temporarily comment out the hydra override in your config file:
-
-```yaml
-# - override /hydra: default.yaml
-```
-
-### Working Directory Changes
-
-Remember that Hydra runs experiments inside timestamped directories (e.g., `outputs/YYYY-MM-DD/HH-MM-SS/`). This is why absolute paths are essential - relative paths will break when the working directory changes.
-
----
-
-## 6. Quick Comparison: Streamed vs. Premade
-
-| Feature                    | Streamed | Premade |
-| -------------------------- | -------- | ------- |
-| Reads Zarr at runtime      | Yes      | No      |
-| Needs pre-generated samples| No       | Yes     |
-| Sensitive to storage flags | Yes      | No      |
-| Recommended for beginners  | No       | Yes     |
 
 ---
 

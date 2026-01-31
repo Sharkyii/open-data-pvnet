@@ -105,17 +105,18 @@ import zarr
 df = pd.read_csv('generation_data.csv', parse_dates=['datetime'])
 
 # Convert to xarray Dataset
+# See https://github.com/openclimatefix/ocf-data-sampler/blob/main/ocf_data_sampler/load/generation.py
 ds = xr.Dataset(
     {
-        'generation': (['time', 'gsp_id'], df.pivot_table(
+        'generation': (['time', 'location_id'], df.pivot_table(
             index='datetime', 
-            columns='gsp_id', 
+            columns='location_id', 
             values='generation'
         ).values)
     },
     coords={
         'time': df['datetime'].unique(),
-        'gsp_id': df['gsp_id'].unique()
+        'location_id': df['location_id'].unique()
     }
 )
 

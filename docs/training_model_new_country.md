@@ -83,52 +83,32 @@ Generation data represents the actual solar PV power output for your target coun
 3. **Manual Data Collection**
    - Download from national energy/grid operator websites
    - Use data from research institutions or universities
-   - Format: CSV, JSON, or database exports
+   - **Format**: Must be converted to Zarr format
 
-### Data Requirements
+### Generation Data Schema
 
-- **Time Resolution**: 30-minute intervals (recommended) or hourly
-- **Coverage**: National or regional level
-- **Time Period**: At least 1 year of historical data (more is better)
-- **Format**: Should be convertible to Zarr format
+The data **must** be saved in Zarr format with the following schema:
 
-### Converting to Zarr Format
+- **Dimensions**: `(time_utc, location_id)`
+- **Data Variables**:
+  - `generation_mw`: (float32) Generation in MW
+  - `capacity_mwp`: (float32) Capacity in MW peak
+- **Coordinates**:
+  - `time_utc`: (datetime64[ns]) Time in UTC
+  - `location_id`: (int) Unique identifier for each location
+  - `longitude`: (float) Longitude of the location
+  - `latitude`: (float) Latitude of the location
 
-Once you have generation data, convert it to Zarr format:
+> [!TIP]
+> If `capacity_mwp` is not available, you can approximate it by taking the maximum generation value observed for that location over the time period.
 
-```python
-import pandas as pd
-import xarray as xr
-import zarr
-
-# Load your data (example with CSV)
-df = pd.read_csv('generation_data.csv', parse_dates=['datetime'])
-
-# Convert to xarray Dataset
-# See https://github.com/openclimatefix/ocf-data-sampler/blob/main/ocf_data_sampler/load/generation.py
-ds = xr.Dataset(
-    {
-        'generation': (['time', 'location_id'], df.pivot_table(
-            index='datetime', 
-            columns='location_id', 
-            values='generation'
-        ).values)
-    },
-    coords={
-        'time': df['datetime'].unique(),
-        'location_id': df['location_id'].unique()
-    }
-)
-
-# Save to Zarr
-ds.to_zarr('generation_data.zarr', mode='w')
-```
+For reference on how generation data is loaded, see [ocf-data-sampler/load/generation.py](https://github.com/openclimatefix/ocf-data-sampler/blob/main/ocf_data_sampler/load/generation.py).
 
 ### Storage Location
 
 Store your generation data in a location accessible to the training pipeline:
 - **Local**: `./data/{country}/generation/{year}.zarr`
-- **S3**: `s3://ocf-open-data-pvnet/data/{country}/generation/{year}.zarr`
+- **S3**: `s3://ocf-open-data-pvnet/data/{country}/generation/{year}.zarr` (Contact @peterdudfield to upload data here after model verification)
 - **Hugging Face**: Upload to a Hugging Face dataset
 
 ---
@@ -143,42 +123,6 @@ Numerical Weather Prediction (NWP) data provides weather forecasts that the mode
 - **Public Access**: Free and openly available
 - **Good Resolution**: 0.25° (~25km) resolution
 - **Multiple Variables**: Includes all necessary weather parameters
-
-### Downloading GFS Data
-
-#### Option A: Using the CLI (Recommended)
-
-```bash
-# Download GFS data for a specific date range
-# Note: GFS data is available globally, so no region parameter needed
-open-data-pvnet gfs archive --year 2023 --month 1 --day 1
-```
-
-#### Option B: Direct from AWS S3
-
-GFS data is available on AWS S3:
-
-```bash
-# List available data
-aws s3 ls s3://noaa-gfs-bdp-pds/gfs.20230101/00/atmos/ --no-sign-request
-
-# Download specific files
-aws s3 sync s3://noaa-gfs-bdp-pds/gfs.20230101/00/atmos/ ./gfs_data/ --no-sign-request
-```
-
-#### Option C: Using Python
-
-```python
-import xarray as xr
-import s3fs
-
-# Access GFS data from S3
-s3 = s3fs.S3FileSystem(anon=True)
-gfs_path = 's3://noaa-gfs-bdp-pds/gfs.20230101/00/atmos/'
-
-# Open dataset
-ds = xr.open_dataset(s3.open(gfs_path + 'gfs.t00z.pgrb2.0p25.f000'))
-```
 
 ### Required GFS Variables
 
@@ -207,9 +151,10 @@ Example:
 
 ```python
 import xarray as xr
+import s3fs
 
-# Load GFS data
-gfs_ds = xr.open_zarr('gfs_global.zarr')
+# Load GFS data from S3 (no need to download all of it)
+gfs_ds = xr.open_zarr('s3://ocf-open-data-pvnet/data/gfs_global.zarr') # Update with actual S3 path if different
 
 # Define bounding box for your country (example: Germany)
 lat_min, lat_max = 47.0, 55.0
@@ -243,105 +188,9 @@ Create a new configuration file: `src/open_data_pvnet/configs/PVNet_configs/data
 
 Example for Germany (`germany_configuration.yaml`):
 
-```yaml
-general:
-  description: Configuration for {Country} solar forecasting
-  name: {country}_config
+Please refer to the [example_configuration.yaml](https://github.com/openclimatefix/open-data-pvnet/blob/main/src/open_data_pvnet/configs/PVNet_configs/datamodule/configuration/example_configuration.yaml) for the most up-to-date structure and zarr path examples.
 
-input_data:
-  gsp:
-    # Path to your generation data in zarr format
-    zarr_path: "s3://ocf-open-data-pvnet/data/{country}/generation/2023.zarr"
-    # Or local path: "./data/{country}/generation/2023.zarr"
-    interval_start_minutes: -60  # 1 hour before forecast time
-    interval_end_minutes: 480    # 8 hours after forecast time
-    time_resolution_minutes: 30  # Match your data resolution
-    dropout_timedeltas_minutes: []
-    dropout_fraction: 0.0
-    public: True  # Set to False if using private S3 bucket
-
-  nwp:
-    gfs:
-      time_resolution_minutes: 180  # GFS resolution (3 hours)
-      interval_start_minutes: -180  # 3 hours before
-      interval_end_minutes: 540     # 9 hours after
-      dropout_fraction: 0.0
-      dropout_timedeltas_minutes: []
-      # Path to your GFS data for the country
-      zarr_path: "s3://ocf-open-data-pvnet/data/{country}/gfs/2023.zarr"
-      provider: "gfs"
-      # Adjust based on your cropped region size
-      image_size_pixels_height: 32  # Adjust for your country
-      image_size_pixels_width: 40   # Adjust for your country
-      public: True
-      channels:
-        - dlwrf
-        - dswrf
-        - hcc
-        - mcc
-        - lcc
-        - prate
-        - r
-        - t
-        - tcc
-        - u10
-        - u100
-        - v10
-        - v100
-        - vis
-      # Normalization constants (calculate from your data)
-      # IMPORTANT: You must calculate these from YOUR actual GFS data for your country
-      # The values below are examples from UK data - replace with your country's values
-      normalisation_constants:
-        dlwrf:
-          mean: 298.342
-          std: 96.305916
-        dswrf:
-          mean: 168.12321
-          std: 246.18533
-        hcc:
-          mean: 35.272
-          std: 42.525383
-        lcc:
-          mean: 43.578342
-          std: 44.3732
-        mcc:
-          mean: 33.738823
-          std: 43.150745
-        prate:
-          mean: 2.8190969e-05
-          std: 0.00010159573
-        r:
-          mean: 18.359747
-          std: 25.440672
-        t:
-          mean: 278.5223
-          std: 22.825893
-        tcc:
-          mean: 66.841606
-          std: 41.030598
-        u10:
-          mean: -0.0022310058
-          std: 5.470838
-        u100:
-          mean: 0.0823025
-          std: 6.8899174
-        v10:
-          mean: 0.06219831
-          std: 4.7401133
-        v100:
-          mean: 0.0797807
-          std: 6.076132
-        vis:
-          mean: 19628.32
-          std: 8294.022
-      # Note: Calculate these from your GFS data using the script in section 3.2
-
-  solar_position:
-    interval_start_minutes: -60
-    interval_end_minutes: 480
-    time_resolution_minutes: 30
-```
+You can copy this file and adapt it for your country.
 
 ### 3.2 Calculate Normalization Constants
 
@@ -602,73 +451,7 @@ After training your first model:
 
 ---
 
-## Example: Complete Workflow for a New Country
 
-This example uses **Germany** as a reference, but the same process applies to other countries like USA, Netherlands, Belgium, or France.
-
-### Step-by-Step Example: Germany
-
-```bash
-# 1. Get generation data
-# For Germany: Check ENTSO-E Transparency Platform or Bundesnetzagentur
-# Save as: ./data/germany/generation/2023.zarr
-
-# 2. Get GFS data for Germany region
-open-data-pvnet gfs archive --year 2023 --month 1 --day 1
-# Crop to Germany bounding box (lat: 47-55°N, lon: 5-15°E)
-# Save as: ./data/germany/gfs/2023.zarr
-
-# 3. Create configuration file
-# Create: src/open_data_pvnet/configs/PVNet_configs/datamodule/configuration/germany_configuration.yaml
-# Use the template in Step 3.1, replacing {country} with "germany"
-
-# 4. Calculate normalization constants
-# Run the script from Step 3.2 on your GFS data
-# Update the normalisation_constants in your config file
-
-# 5. Update training configuration
-# Edit: streamed_batches.yaml with path to germany_configuration.yaml
-# Set train_period and val_period based on your data availability
-
-# 6. Generate training samples (optional but recommended)
-python src/open_data_pvnet/scripts/save_samples.py
-
-# 7. Train model
-python run.py
-
-# 8. Save and share model weights
-# Model saved in: outputs/{timestamp}/checkpoints/best.ckpt
-# Upload to Hugging Face or S3 (see Step 5)
-```
-
-### Country-Specific Data Sources
-
-#### United States
-- **Generation Data**: EIA (Energy Information Administration), CAISO, ERCOT
-- **Data Format**: Often available via APIs or CSV downloads
-- **Coverage**: Regional (ISO regions) or national level
-
-#### Netherlands
-- **Generation Data**: ENTSO-E Transparency Platform, TenneT (Dutch TSO)
-- **Data Format**: API access via ENTSO-E, CSV exports
-- **Coverage**: National level
-
-#### Belgium
-- **Generation Data**: ENTSO-E Transparency Platform, Elia (Belgian TSO)
-- **Data Format**: API or CSV
-- **Coverage**: National level
-
-#### France
-- **Generation Data**: ENTSO-E Transparency Platform, RTE (French TSO)
-- **Data Format**: API access, data portal
-- **Coverage**: National level
-
-#### Germany
-- **Generation Data**: ENTSO-E Transparency Platform, Bundesnetzagentur
-- **Data Format**: API or CSV exports
-- **Coverage**: National and regional level
-
-**Note**: For all European countries, the [ENTSO-E Transparency Platform](https://transparency.entsoe.eu/) is a valuable resource for generation data.
 
 ---
 

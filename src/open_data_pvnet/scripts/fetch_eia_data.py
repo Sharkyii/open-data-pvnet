@@ -2,6 +2,7 @@ import os
 import logging
 import requests
 import pandas as pd
+import xarray as xr
 from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -19,13 +20,14 @@ class EIAData:
     def get_data(
         self, 
         route: str, 
-        frequency: str, 
         start_date: str, 
         end_date: str, 
+        frequency: str = "hourly", 
         data_cols: List[str] = ["value"],
         facets: Optional[Dict[str, Any]] = None,
         offset: int = 0,
-        length: int = 5000
+        length: int = 5000,
+        region: str = "US48",
     ) -> Optional[pd.DataFrame]:
         """
         Fetch data from the EIA API.
@@ -39,12 +41,19 @@ class EIAData:
             facets: Dictionary of facets to filter by
             offset: Pagination offset
             length: Number of results to return
+            region: Region identifier (default: "US48")
             
         Returns:
             pd.DataFrame: Data returned from the API, or None if error/empty
         """
         if not self.api_key:
              raise ValueError("API Key is missing")
+
+        if region:
+            if facets is None:
+                facets = {}
+            if "respondent" not in facets and region == "US48":
+                facets["respondent"] = ["US48"]
 
         url = f"{self.base_url}/{route}/data"
         
@@ -89,6 +98,64 @@ class EIAData:
             if response is not None:
                 logger.error(f"Response: {response.text}")
             return None
+
+    def get_dataset(
+        self,
+        route: str,
+        start_date: str,
+        end_date: str,
+        frequency: str = "hourly",
+        data_cols: List[str] = ["value"],
+        facets: Optional[Dict[str, Any]] = None,
+        region: str = "US48",
+    ) -> Optional[xr.Dataset]:
+        """
+        Fetch data and convert to xarray Dataset compatible with ocf-data-sampler.
+        
+        Args:
+            route: API route
+            start_date: Start date string
+            end_date: End date string
+            frequency: Data frequency
+            data_cols: List of data columns
+            facets: Dictionary of facets
+            region: Region identifier
+            
+        Returns:
+            xr.Dataset: Dataset with datetime_gmt index, or None if no data
+        """
+        df = self.get_data(
+            route=route,
+            start_date=start_date,
+            end_date=end_date,
+            frequency=frequency,
+            data_cols=data_cols,
+            facets=facets,
+            region=region
+        )
+        
+        if df is None or df.empty:
+            return None
+            
+        # Process for ocf-data-sampler format
+        if "period" in df.columns:
+            df["datetime_gmt"] = pd.to_datetime(df["period"], utc=True)
+            df = df.drop(columns=["period"])
+            
+        index_cols = ["datetime_gmt"]
+        if "respondent" in df.columns:
+            index_cols.append("respondent")
+        elif "region" in df.columns:
+            index_cols.append("region")
+            
+        if not df.index.is_unique:
+             df = df.drop_duplicates(subset=index_cols)
+             
+        df = df.set_index(index_cols)
+        
+        ds = xr.Dataset.from_dataframe(df)
+        
+        return ds
 
 if __name__ == "__main__":
     # Basic test execution

@@ -33,9 +33,9 @@ def test_get_data_success(mock_response):
         
         df = eia.get_data(
             route="test/route",
-            frequency="hourly",
             start_date="2023-01-01",
             end_date="2023-01-02",
+            frequency="hourly",
             data_cols=["value"],
             facets={"fueltype": "SUN"}
         )
@@ -54,7 +54,7 @@ def test_get_data_success(mock_response):
 def test_get_data_missing_key():
     eia = EIAData(api_key=None)
     with pytest.raises(ValueError, match="API Key is missing"):
-        eia.get_data("route", "hourly", "start", "end")
+        eia.get_data("route", "start", "end", frequency="hourly")
 
 def test_get_data_api_error():
     mock_resp = Mock()
@@ -63,7 +63,7 @@ def test_get_data_api_error():
     
     with patch("requests.get", return_value=mock_resp):
         eia = EIAData(api_key="test_key")
-        df = eia.get_data("route", "hourly", "start", "end")
+        df = eia.get_data("route", "start", "end", frequency="hourly")
         assert df is None
 
 def test_get_data_empty_response():
@@ -73,5 +73,37 @@ def test_get_data_empty_response():
     
     with patch("requests.get", return_value=mock_resp):
         eia = EIAData(api_key="test_key")
-        df = eia.get_data("route", "hourly", "start", "end")
+        df = eia.get_data("route", "start", "end", frequency="hourly")
         assert df is None
+
+def test_get_data_with_region(mock_response):
+    with patch("requests.get", return_value=mock_response) as mock_get:
+        eia = EIAData(api_key="test_key")
+        eia.get_data("route", "start", "end")
+        
+        args, kwargs = mock_get.call_args
+        assert kwargs["params"]["facets[respondent][0]"] == "US48"
+
+def test_get_data_without_region(mock_response):
+    with patch("requests.get", return_value=mock_response) as mock_get:
+        eia = EIAData(api_key="test_key")
+        eia.get_data("route", "start", "end", region=None)
+        
+        args, kwargs = mock_get.call_args
+        assert not any("facets[respondent]" in k for k in kwargs["params"].keys())
+
+def test_get_dataset_success(mock_response):
+    import xarray as xr
+    with patch("requests.get", return_value=mock_response) as mock_get:
+        eia = EIAData(api_key="test_key")
+        
+        ds = eia.get_dataset(
+            route="test/route",
+            start_date="2023-01-01",
+            end_date="2023-01-02"
+        )
+        
+        assert isinstance(ds, xr.Dataset)
+        assert "datetime_gmt" in ds.coords or "datetime_gmt" in ds.indexes
+        assert "value" in ds.data_vars
+        assert len(ds.datetime_gmt) == 2

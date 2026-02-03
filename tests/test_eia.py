@@ -107,3 +107,40 @@ def test_get_dataset_success(mock_response):
         assert "datetime_gmt" in ds.coords or "datetime_gmt" in ds.indexes
         assert "value" in ds.data_vars
         assert len(ds.datetime_gmt) == 2
+
+def test_get_data_pagination():
+    page1 = {
+        "response": {
+            "data": [
+                {"period": "2023-01-01T00", "value": 100},
+                {"period": "2023-01-01T01", "value": 150},
+            ]
+        }
+    }
+    page2 = {
+        "response": {
+            "data": [
+                {"period": "2023-01-01T02", "value": 200},
+            ]
+        }
+    }
+    
+    mock_resp1 = Mock()
+    mock_resp1.json.return_value = page1
+    mock_resp1.raise_for_status.return_value = None
+    
+    mock_resp2 = Mock()
+    mock_resp2.json.return_value = page2
+    mock_resp2.raise_for_status.return_value = None
+    
+    with patch("requests.get", side_effect=[mock_resp1, mock_resp2]) as mock_get:
+        eia = EIAData(api_key="test_key")
+        
+        df = eia.get_data("route", "start", "end", length=2)
+        
+        assert len(df) == 3
+        assert mock_get.call_count == 2
+        
+        call_args_list = mock_get.call_args_list
+        assert call_args_list[0][1]["params"]["offset"] == 0
+        assert call_args_list[1][1]["params"]["offset"] == 2

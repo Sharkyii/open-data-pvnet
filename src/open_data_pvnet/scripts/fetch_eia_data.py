@@ -77,25 +77,45 @@ class EIAData:
                 else:
                     params[f"facets[{key}][]"] = value
 
+        all_data = []
+        
         try:
-            logger.info(f"Fetching data from {url}...")
-            response = requests.get(url, params=params)
-            response.raise_for_status()
+            current_offset = offset
+            while True:
+                # Create a fresh copy of params for each request to avoid mutating history
+                request_params = params.copy()
+                request_params["offset"] = current_offset
+                
+                logger.info(f"Fetching data from {url}, offset={current_offset}...")
+                response = requests.get(url, params=request_params)
+                response.raise_for_status()
+                
+                payload = response.json()
+                if "response" in payload and "data" in payload["response"]:
+                    data = payload["response"]["data"]
+                    if not data:
+                        logger.info("No more data returned from API.")
+                        break
+                    
+                    all_data.extend(data)
+                    
+                    if len(data) < length:
+                        break
+                        
+                    current_offset += length
+                else:
+                    logger.error(f"Unexpected API response format: {payload.keys()}")
+                    break
             
-            payload = response.json()
-            if "response" in payload and "data" in payload["response"]:
-                data = payload["response"]["data"]
-                if not data:
-                    logger.warning("No data returned from API.")
-                    return None
-                return pd.DataFrame(data)
-            else:
-                logger.error(f"Unexpected API response format: {payload.keys()}")
+            if not all_data:
+                logger.warning("No data retrieved.")
                 return None
+                
+            return pd.DataFrame(all_data)
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Request failed: {e}")
-            if response is not None:
+            if 'response' in locals() and response is not None:
                 logger.error(f"Response: {response.text}")
             return None
 

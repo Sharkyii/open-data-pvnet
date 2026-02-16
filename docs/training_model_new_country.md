@@ -107,7 +107,7 @@ For reference on how generation data is loaded, see [ocf-data-sampler/load/gener
 ### Storage Location
 
 Store your generation data in a location accessible to the training pipeline:
-- **Local**: `./data/{country}/generation/{year}.zarr`
+- **Local**: `./data/{country}/generation/{year}.zarr` (Note: Do not commit this in the repository)
 - **S3**: `s3://ocf-open-data-pvnet/data/{country}/generation/{year}.zarr` (Contact @peterdudfield to upload data here after model verification)
 - **Hugging Face**: Upload to a Hugging Face dataset
 
